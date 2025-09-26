@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/orderbook"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/holiman/uint256"
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
 	"github.com/kaiachain/kaia-load-tester/klayslave/clipool"
 	"github.com/myzhan/boomer"
@@ -27,6 +28,8 @@ var (
 	// User settings
 	baseToken  = "2"
 	quoteToken = "3"
+
+	marketRules = orderbook.NewMarketRules()
 )
 
 func Init(accs []*account.Account, endpoint string, _ *big.Int) {
@@ -58,9 +61,9 @@ func Run() {
 	elapsed := boomer.Now() - start
 
 	if err == nil {
-		boomer.RecordSuccess("http", "SendNewOrderTxWithTpsl"+" to "+endPoint, elapsed, int64(10))
+		boomer.RecordSuccess("http", "SendNewLimitOrderTx"+" to "+endPoint, elapsed, int64(10))
 	} else {
-		boomer.RecordFailure("http", "SendNewOrderTxWithTpsl"+" to "+endPoint, elapsed, err.Error())
+		boomer.RecordFailure("http", "SendNewLimitOrderTx"+" to "+endPoint, elapsed, err.Error())
 	}
 }
 
@@ -72,66 +75,76 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 		tx        *types.Transaction
 		orderType = orderbook.LIMIT
 		err       error
-		txType    int
 	)
 
-	// Cancel order scenario implementation (probability in parenthesis):
-	// - tx1: provide liquidity ($2 BUY Q10)
-	// - tx2: provide liquidity ($3 SELL Q10)
-	// - tx3: take liquidity ($2 SELL Q1)
-	// - tx4: take liquidity ($3 BUY Q1)
-	randNum := rand.Intn(100)
-	switch {
-	case randNum < 10:
-		txType = 0
+	// Generate random price between 0.95 and 1.05 (with 18 decimals)
+	// 0.95 * 1e18 = 950000000000000000
+	// 0.05 * 1e18 = 50000000000000000 (each side range)
+	// Total range: 0.1 * 1e18 = 100000000000000000
+	minPrice := new(big.Int).Mul(big.NewInt(95), big.NewInt(1e16)) // 0.95 * 1e18
+	priceRange := new(big.Int).Mul(big.NewInt(10), big.NewInt(1e16)) // 0.1 * 1e18
+	randomOffset := new(big.Int).Rand(rand.New(rand.NewSource(rand.Int63())), priceRange)
+	price = new(big.Int).Add(minPrice, randomOffset)
+
+	// Get tick size and adjust price to be compliant with tick
+	priceUint256, _ := uint256.FromBig(price)
+	tick := marketRules.GetTickSize(priceUint256)
+	if tick != nil && tick.Sign() > 0 {
+		// Round price to nearest tick
+		tickBig := tick.ToBig()
+		remainder := new(big.Int).Mod(price, tickBig)
+		if remainder.Sign() > 0 {
+			price.Sub(price, remainder)
+			// If remainder > tick/2, round up
+			halfTick := new(big.Int).Div(tickBig, big.NewInt(2))
+			if remainder.Cmp(halfTick) > 0 {
+				price.Add(price, tickBig)
+			}
+		}
+	}
+
+	// Generate random quantity between 2 and 3 (with 18 decimals)
+	// 2 * 1e18 = 2000000000000000000
+	// 1 * 1e18 = 1000000000000000000 (range)
+	minQuantity := new(big.Int).Mul(big.NewInt(2), big.NewInt(1e18)) // 2 * 1e18
+	quantityRange := new(big.Int).SetInt64(1e18) // 1 * 1e18
+	randomOffset = new(big.Int).Rand(rand.New(rand.NewSource(rand.Int63())), quantityRange)
+	quantity = new(big.Int).Add(minQuantity, randomOffset)
+
+	// Get lot size and adjust quantity to be compliant with lot
+	lot := marketRules.GetLotSize(priceUint256)
+	if lot != nil && lot.Sign() > 0 {
+		// Round quantity to nearest lot
+		lotBig := lot.ToBig()
+		remainder := new(big.Int).Mod(quantity, lotBig)
+		if remainder.Sign() > 0 {
+			quantity.Sub(quantity, remainder)
+			// If remainder > lot/2, round up
+			halfLot := new(big.Int).Div(lotBig, big.NewInt(2))
+			if remainder.Cmp(halfLot) > 0 {
+				quantity.Add(quantity, lotBig)
+			}
+		}
+	}
+
+	// 50/50 probability for BUY/SELL
+	if rand.Intn(2) == 0 {
 		side = orderbook.BUY
-		price = scaleUp(2)
-		quantity = scaleUp(10)
-		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
-		if err != nil {
-			log.Printf("Failed to generate new order tx (type%d): error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
-				txType, err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
-			return err
-		}
-	case randNum < 20:
-		txType = 1
+	} else {
 		side = orderbook.SELL
-		price = scaleUp(3)
-		quantity = scaleUp(10)
-		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
-		if err != nil {
-			log.Printf("Failed to generate new order tx (type%d): error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
-				txType, err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
-			return err
-		}
-	case randNum < 60:
-		txType = 2
-		side = orderbook.SELL
-		price = scaleUp(2)
-		quantity = scaleUp(1)
-		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
-		if err != nil {
-			log.Printf("Failed to generate new order tx (type%d): error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
-				txType, err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
-			return err
-		}
-	default:
-		txType = 3
-		side = orderbook.BUY
-		price = scaleUp(3)
-		quantity = scaleUp(1)
-		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
-		if err != nil {
-			log.Printf("Failed to generate new order tx (type%d): error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
-				txType, err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
-			return err
-		}
+	}
+
+	tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
+	if err != nil {
+		log.Printf("Failed to generate new order tx: error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
+			err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
+		return err
 	}
 
 	_, err = from.SendTx(cli, tx)
 	if err != nil {
-		log.Printf("Failed to send new order tx (type%d): error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d\n",
-			txType, err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
+		log.Printf("Failed to send new order tx: error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d\n",
+			err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
 	}
 	return err
 }
