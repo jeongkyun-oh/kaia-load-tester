@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/core/orderbook"
+	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
@@ -66,11 +66,11 @@ func Run() {
 
 func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 	var (
-		side      orderbook.Side
+		side      obtypes.OrderSide
 		price     *big.Int
 		quantity  *big.Int
 		tx        *types.Transaction
-		orderType = orderbook.MARKET
+		orderType = obtypes.MARKET
 		err       error
 		txType    int
 	)
@@ -84,10 +84,10 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 	switch {
 	case randNum < 10:
 		txType = 0
-		side = orderbook.BUY
+		side = obtypes.BUY
 		price = scaleUp(2)
 		quantity = scaleUp(10)
-		orderType = orderbook.LIMIT
+		orderType = obtypes.LIMIT
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
 		if err != nil {
 			log.Printf("Failed to generate new limit order tx (type%d): error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
@@ -96,10 +96,10 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 		}
 	case randNum < 20:
 		txType = 1
-		side = orderbook.SELL
+		side = obtypes.SELL
 		price = scaleUp(3)
 		quantity = scaleUp(10)
-		orderType = orderbook.LIMIT
+		orderType = obtypes.LIMIT
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
 		if err != nil {
 			log.Printf("Failed to generate new limit order tx (type%d): error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
@@ -108,7 +108,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 		}
 	case randNum < 60:
 		txType = 2
-		side = orderbook.SELL
+		side = obtypes.SELL
 		price = scaleUp(0)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
@@ -119,7 +119,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 		}
 	default:
 		txType = 3
-		side = orderbook.BUY
+		side = obtypes.BUY
 		price = scaleUp(0)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)

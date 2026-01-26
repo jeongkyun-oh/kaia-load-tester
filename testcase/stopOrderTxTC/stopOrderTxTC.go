@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/core/orderbook"
+	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
@@ -66,19 +66,19 @@ func Run() {
 
 func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 	var (
-		side      orderbook.Side
+		side      obtypes.OrderSide
 		price     *big.Int
 		stopPrice *big.Int
 		quantity  *big.Int
 		tx        *types.Transaction
-		orderType = orderbook.LIMIT
+		orderType = obtypes.LIMIT
 		err       error
 		txType    int
 	)
 
 	switch txType = rand.Intn(4); txType {
 	case 0:
-		side = orderbook.BUY
+		side = obtypes.BUY
 		price = scaleUp(3)
 		stopPrice = scaleUp(2)
 		quantity = scaleUp(1)
@@ -89,7 +89,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 			return err
 		}
 	case 1:
-		side = orderbook.BUY
+		side = obtypes.BUY
 		price = scaleUp(2)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
@@ -99,7 +99,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 			return err
 		}
 	case 2:
-		side = orderbook.SELL
+		side = obtypes.SELL
 		price = scaleUp(2)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
@@ -109,7 +109,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 			return err
 		}
 	case 3:
-		side = orderbook.SELL
+		side = obtypes.SELL
 		price = scaleUp(3)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)

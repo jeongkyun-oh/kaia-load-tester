@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/orderbook"
+	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/holiman/uint256"
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
@@ -16,7 +16,7 @@ import (
 )
 
 // validate extracted from OrderContext.validate (core/types/tx_input.go)
-func validate(t *types.OrderContext, marketRules *orderbook.MarketRules) error {
+func validate(t *types.OrderContext, marketRules *obtypes.MarketRules) error {
 	priceMax := new(big.Int).Sub(
 		new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil),
 		big.NewInt(1),
@@ -153,13 +153,13 @@ func validate(t *types.OrderContext, marketRules *orderbook.MarketRules) error {
 func TestNewOrderCtxWithTpsl(t *testing.T) {
 	var (
 		from      = account.NewAccount(0)
-		side      = orderbook.BUY
+		side      = obtypes.BUY
 		price     = scaleUp(3)
 		quantity  = scaleUp(1)
 		tpLimit   = scaleUp(9999)
 		slTrigger = scaleUp(2)
 		slLimit   = scaleUp(1)
-		orderType = orderbook.LIMIT
+		orderType = obtypes.LIMIT
 	)
 
 	ctx := from.NewOrderCtxWithTpsl(baseToken, quoteToken, side, price, quantity, orderType, tpLimit, slTrigger, slLimit)
@@ -175,5 +175,5 @@ func TestNewOrderCtxWithTpsl(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, tx.GetOrderContext())
-	assert.NoError(t, validate(tx.GetOrderContext(), orderbook.NewMarketRules()))
+	assert.NoError(t, validate(tx.GetOrderContext(), obtypes.NewMarketRules()))
 }

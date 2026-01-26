@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/core/orderbook"
+	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/holiman/uint256"
@@ -29,7 +29,7 @@ var (
 	baseToken  = "2"
 	quoteToken = "3"
 
-	marketRules = orderbook.NewMarketRules()
+	marketRules = obtypes.NewMarketRules()
 )
 
 func Init(accs []*account.Account, endpoint string, _ *big.Int) {
@@ -69,11 +69,11 @@ func Run() {
 
 func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 	var (
-		side      orderbook.Side
+		side      obtypes.OrderSide
 		price     *big.Int
 		quantity  *big.Int
 		tx        *types.Transaction
-		orderType = orderbook.LIMIT
+		orderType = obtypes.LIMIT
 		err       error
 	)
 
@@ -129,9 +129,9 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 
 	// 50/50 probability for BUY/SELL
 	if rand.Intn(2) == 0 {
-		side = orderbook.BUY
+		side = obtypes.BUY
 	} else {
-		side = orderbook.SELL
+		side = obtypes.SELL
 	}
 
 	tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)

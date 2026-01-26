@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core/orderbook"
+	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
 	"github.com/kaiachain/kaia-load-tester/klayslave/clipool"
@@ -32,7 +32,7 @@ var (
 	// User settings
 	baseToken  = "2"
 	quoteToken = "3"
-	orderType  = orderbook.LIMIT
+	orderType  = obtypes.LIMIT
 )
 
 func Init(accs []*account.Account, endpoint string, _ *big.Int) {
@@ -64,7 +64,7 @@ func Run() {
 	var (
 		from     = accGrp[atomic.AddUint32(&cursor, 1)%uint32(nAcc)]
 		quantity = scaleUp(1)
-		side     = orderbook.Side(rand.Intn(2))
+		side     = obtypes.OrderSide(rand.Intn(2))
 		price    = scaleUp(3 - int64(side)) // If buy, $3. If sell, $2.
 	)
 
@@ -95,8 +95,8 @@ func provideInitialLiquidity(cli *ethclient.Client) {
 		splitCount        = int(1e6) // How many orders should LP make for each liquidity provision
 	)
 
-	provideLiquidity(cli, orderbook.SELL, askLiquidityPrice, initialQuantity, splitCount)
-	provideLiquidity(cli, orderbook.BUY, bidLiquidityPrice, initialQuantity, splitCount)
+	provideLiquidity(cli, obtypes.SELL, askLiquidityPrice, initialQuantity, splitCount)
+	provideLiquidity(cli, obtypes.BUY, bidLiquidityPrice, initialQuantity, splitCount)
 }
 
 // lp watches order status, and provides liquidity when liquidity is needed.
@@ -119,11 +119,11 @@ func liquidityProvider(cli *ethclient.Client) {
 		}
 
 		if askDeficit.Sign() > 0 {
-			provideLiquidity(cli, orderbook.SELL, askLiquidityPrice, askDeficit, splitCount)
+			provideLiquidity(cli, obtypes.SELL, askLiquidityPrice, askDeficit, splitCount)
 			log.Printf("Sent ask side LP order: price=%s, quantity=%s", askLiquidityPrice.String(), askDeficit.String())
 		}
 		if bidDeficit.Sign() > 0 {
-			provideLiquidity(cli, orderbook.BUY, bidLiquidityPrice, bidDeficit, splitCount)
+			provideLiquidity(cli, obtypes.BUY, bidLiquidityPrice, bidDeficit, splitCount)
 			log.Printf("Sent bid side LP order: price=%s, quantity=%s", bidLiquidityPrice.String(), bidDeficit.String())
 		}
 
@@ -132,12 +132,12 @@ func liquidityProvider(cli *ethclient.Client) {
 }
 
 type OrderJob struct {
-	side     orderbook.Side
+	side     obtypes.OrderSide
 	price    *big.Int
 	quantity *big.Int
 }
 
-func provideLiquidity(cli *ethclient.Client, side orderbook.Side, price *big.Int, quantity *big.Int, splitCount int) {
+func provideLiquidity(cli *ethclient.Client, side obtypes.OrderSide, price *big.Int, quantity *big.Int, splitCount int) {
 	numWorkers := max(runtime.NumCPU(), 100)
 
 	jobs := make(chan OrderJob, splitCount)
@@ -174,17 +174,17 @@ func lpWorker(jobs <-chan OrderJob, wg *sync.WaitGroup) {
 	for job := range jobs {
 		from := accGrp[atomic.AddUint32(&cursor, 1)%uint32(nAcc)]
 
-		tx, err := from.GenNewOrderTx(baseToken, quoteToken, job.side, job.price, job.quantity, orderbook.LIMIT)
+		tx, err := from.GenNewOrderTx(baseToken, quoteToken, job.side, job.price, job.quantity, obtypes.LIMIT)
 		if err != nil {
 			log.Printf("Failed to generate LP tx: error=%v, from=%s, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
-				err, from.GetAddress().Hex(), baseToken, quoteToken, job.side, job.price.String(), job.quantity.String(), orderbook.LIMIT)
+				err, from.GetAddress().Hex(), baseToken, quoteToken, job.side, job.price.String(), job.quantity.String(), obtypes.LIMIT)
 			continue
 		}
 
 		_, err = from.SendTx(cli, tx)
 		if err != nil {
 			log.Printf("Failed to send LP tx: error=%v, from=%s, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
-				err, from.GetAddress().Hex(), baseToken, quoteToken, job.side, job.price.String(), job.quantity.String(), orderbook.LIMIT)
+				err, from.GetAddress().Hex(), baseToken, quoteToken, job.side, job.price.String(), job.quantity.String(), obtypes.LIMIT)
 		}
 	}
 }
@@ -192,12 +192,12 @@ func lpWorker(jobs <-chan OrderJob, wg *sync.WaitGroup) {
 // checkLiquidityDeficit returns [askDeficit, bidDeficit]
 func checkLiquidityDeficit(cli *ethclient.Client, askLiquidityPrice *big.Int, bidLiquidityPrice *big.Int, minQuantity *big.Int) []*big.Int {
 	c := cli.Client()
-	var aggs []*orderbook.Aggregated
+	var aggs []*obtypes.Aggregated
 	c.CallContext(context.Background(), &aggs, "debug_getLvl2Data")
 
 	symbol := baseToken + "/" + quoteToken
-	askQuantity := findQuantity(aggs, symbol, askLiquidityPrice, orderbook.SELL)
-	bidQuantity := findQuantity(aggs, symbol, bidLiquidityPrice, orderbook.BUY)
+	askQuantity := findQuantity(aggs, symbol, askLiquidityPrice, obtypes.SELL)
+	bidQuantity := findQuantity(aggs, symbol, bidLiquidityPrice, obtypes.BUY)
 
 	askDeficit := new(big.Int).Sub(minQuantity, askQuantity)
 	if askDeficit.Sign() < 0 {
@@ -212,8 +212,8 @@ func checkLiquidityDeficit(cli *ethclient.Client, askLiquidityPrice *big.Int, bi
 	return []*big.Int{askDeficit, bidDeficit}
 }
 
-func findQuantity(aggs []*orderbook.Aggregated, symbol string, price *big.Int, side orderbook.Side) *big.Int {
-	aggIdx := slices.IndexFunc(aggs, func(a *orderbook.Aggregated) bool {
+func findQuantity(aggs []*obtypes.Aggregated, symbol string, price *big.Int, side obtypes.OrderSide) *big.Int {
+	aggIdx := slices.IndexFunc(aggs, func(a *obtypes.Aggregated) bool {
 		return a.Symbol == symbol
 	})
 	if aggIdx == -1 {
@@ -224,9 +224,9 @@ func findQuantity(aggs []*orderbook.Aggregated, symbol string, price *big.Int, s
 	agg := aggs[aggIdx]
 
 	var arr [][]string
-	if side == orderbook.SELL {
+	if side == obtypes.SELL {
 		arr = agg.Asks
-	} else if side == orderbook.BUY {
+	} else if side == obtypes.BUY {
 		arr = agg.Bids
 	} else {
 		log.Printf("Invalid side: %d. Regarding quantity as zero.", side)

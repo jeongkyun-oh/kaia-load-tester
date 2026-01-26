@@ -17,7 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/orderbook"
+	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -176,7 +176,6 @@ func (acc *Account) NewSessionCreateCtx(expiresAt uint64, nonce uint64) (*types.
 		PublicKey: sessionAddr,
 		ExpiresAt: expiresAt,
 		Nonce:     nonce,
-		Metadata:  nil,
 	}
 	typedData := types.ToTypedData(&session)
 	_, sigHash, _ := types.SignEip712(typedData)
@@ -201,7 +200,6 @@ func (acc *Account) NewSessionDeleteCtx(i int, nonce uint64) (*types.SessionCont
 		PublicKey: sessionAddr,
 		ExpiresAt: target.Session.ExpiresAt,
 		Nonce:     nonce,
-		Metadata:  nil,
 	}
 	typedData := types.ToTypedData(&session)
 	_, sigHash, _ := types.SignEip712(typedData)
@@ -239,7 +237,7 @@ func (acc *Account) NewTokenTransferCtx(to *Account, value *big.Int, token strin
 	return &ctx
 }
 
-func (acc *Account) NewOrderCtx(baseToken string, quoteToken string, side orderbook.Side, price *big.Int, quantity *big.Int, orderType orderbook.OrderType) *types.OrderContext {
+func (acc *Account) NewOrderCtx(baseToken string, quoteToken string, side obtypes.OrderSide, price *big.Int, quantity *big.Int, orderType obtypes.OrderType) *types.OrderContext {
 	ctx := types.OrderContext{
 		L1Owner:    acc.GetAddress(),
 		BaseToken:  baseToken,
@@ -255,7 +253,7 @@ func (acc *Account) NewOrderCtx(baseToken string, quoteToken string, side orderb
 	return &ctx
 }
 
-func (acc *Account) NewOrderCtxWithTpsl(baseToken string, quoteToken string, side orderbook.Side, price *big.Int, quantity *big.Int, orderType orderbook.OrderType, tpLimit, slTrigger, slLimit *big.Int) *types.OrderContext {
+func (acc *Account) NewOrderCtxWithTpsl(baseToken string, quoteToken string, side obtypes.OrderSide, price *big.Int, quantity *big.Int, orderType obtypes.OrderType, tpLimit, slTrigger, slLimit *big.Int) *types.OrderContext {
 	tpsl := types.TPSLContext{
 		TPLimit:   tpLimit,
 		SLTrigger: slTrigger,
@@ -268,7 +266,7 @@ func (acc *Account) NewOrderCtxWithTpsl(baseToken string, quoteToken string, sid
 	return ctx
 }
 
-func (acc *Account) NewStopOrderCtx(baseToken string, quoteToken string, side orderbook.Side, stopPrice, price *big.Int, quantity *big.Int, orderType orderbook.OrderType) *types.StopOrderContext {
+func (acc *Account) NewStopOrderCtx(baseToken string, quoteToken string, side obtypes.OrderSide, stopPrice, price *big.Int, quantity *big.Int, orderType obtypes.OrderType) *types.StopOrderContext {
 	ctx := types.StopOrderContext{
 		L1Owner:    acc.GetAddress(),
 		BaseToken:  baseToken,
@@ -589,7 +587,7 @@ func (acc *Account) GenTokenTransferTx(to *Account, value *big.Int, token string
 	return tx, nil
 }
 
-func (acc *Account) GenNewOrderTx(baseToken string, quoteToken string, side orderbook.Side, price *big.Int, quantity *big.Int, orderType orderbook.OrderType) (*types.Transaction, error) {
+func (acc *Account) GenNewOrderTx(baseToken string, quoteToken string, side obtypes.OrderSide, price *big.Int, quantity *big.Int, orderType obtypes.OrderType) (*types.Transaction, error) {
 	acc.mutex.Lock()
 	defer acc.mutex.Unlock()
 	acc.timenonce++
@@ -619,7 +617,7 @@ func (acc *Account) GenNewOrderTx(baseToken string, quoteToken string, side orde
 	return tx, nil
 }
 
-func (acc *Account) GenNewOrderTxWithTpsl(baseToken string, quoteToken string, side orderbook.Side, price *big.Int, quantity *big.Int, orderType orderbook.OrderType, tpLimit, slTrigger, slLimit *big.Int) (*types.Transaction, error) {
+func (acc *Account) GenNewOrderTxWithTpsl(baseToken string, quoteToken string, side obtypes.OrderSide, price *big.Int, quantity *big.Int, orderType obtypes.OrderType, tpLimit, slTrigger, slLimit *big.Int) (*types.Transaction, error) {
 	acc.mutex.Lock()
 	defer acc.mutex.Unlock()
 	acc.timenonce++
@@ -649,7 +647,7 @@ func (acc *Account) GenNewOrderTxWithTpsl(baseToken string, quoteToken string, s
 	return tx, nil
 }
 
-func (acc *Account) GenNewStopOrderTx(baseToken string, quoteToken string, side orderbook.Side, stopPrice, price *big.Int, quantity *big.Int, orderType orderbook.OrderType) (*types.Transaction, error) {
+func (acc *Account) GenNewStopOrderTx(baseToken string, quoteToken string, side obtypes.OrderSide, stopPrice, price *big.Int, quantity *big.Int, orderType obtypes.OrderType) (*types.Transaction, error) {
 	acc.mutex.Lock()
 	defer acc.mutex.Unlock()
 	acc.timenonce++

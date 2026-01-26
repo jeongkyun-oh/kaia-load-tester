@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/core/orderbook"
+	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/holiman/uint256"
@@ -17,7 +17,7 @@ import (
 )
 
 func TestNewOrderTxTC(t *testing.T) {
-	mr := orderbook.NewMarketRules()
+	mr := obtypes.NewMarketRules()
 	for range 1000 {
 		var (
 			base           = uint256.NewInt(uint64(1e18)) // 0.3-0.7
@@ -36,10 +36,10 @@ func TestNewOrderTxTC(t *testing.T) {
 func TestGenOrderTx(t *testing.T) {
 	var (
 		from      = account.NewAccount(0)
-		side      = orderbook.BUY
+		side      = obtypes.BUY
 		price     = big.NewInt(2e18)
 		quantity  = big.NewInt(1e18)
-		orderType = orderbook.LIMIT
+		orderType = obtypes.LIMIT
 	)
 
 	tx, err := from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)

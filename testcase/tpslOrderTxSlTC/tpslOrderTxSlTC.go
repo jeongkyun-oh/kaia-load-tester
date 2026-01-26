@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/core/orderbook"
+	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
@@ -71,16 +71,16 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 		tpLimit   *big.Int
 		slTrigger *big.Int
 		slLimit   *big.Int
-		side      orderbook.Side
+		side      obtypes.OrderSide
 		tx        *types.Transaction
-		orderType = orderbook.LIMIT
+		orderType = obtypes.LIMIT
 		err       error
 		txType    int
 	)
 
 	switch txType = rand.Intn(5); txType {
 	case 0:
-		side = orderbook.BUY
+		side = obtypes.BUY
 		price = scaleUp(3)
 		quantity = scaleUp(1)
 		tpLimit = scaleUp(9999) // not triggered
@@ -93,7 +93,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 			return err
 		}
 	case 1:
-		side = orderbook.SELL
+		side = obtypes.SELL
 		price = scaleUp(3)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
@@ -103,7 +103,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 			return err
 		}
 	case 2:
-		side = orderbook.BUY
+		side = obtypes.BUY
 		price = scaleUp(2)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
@@ -113,7 +113,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 			return err
 		}
 	case 3:
-		side = orderbook.SELL
+		side = obtypes.SELL
 		price = scaleUp(2)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
@@ -123,7 +123,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 			return err
 		}
 	case 4:
-		side = orderbook.BUY
+		side = obtypes.BUY
 		price = scaleUp(1)
 		quantity = scaleUp(1)
 		tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
