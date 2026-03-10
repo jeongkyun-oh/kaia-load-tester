@@ -711,7 +711,13 @@ func (acc *Account) SendTx(c *ethclient.Client, tx *types.Transaction) (common.H
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
-	err := c.SendTransaction(ctx, tx)
+	//err := c.SendTransaction(ctx, tx)
+	data, err := tx.MarshalBinary()
+	if err != nil {
+		return common.Hash{}, err
+	}
+	//return ec.c.CallContext(ctx, nil, "eth_sendRawTransaction", hexutil.Encode(data))
+	err = c.Client().CallContext(ctx, nil, "eth_sendRawTransactionAsync", hexutil.Encode(data))
 	if err != nil {
 		return common.Hash{}, err
 	}
