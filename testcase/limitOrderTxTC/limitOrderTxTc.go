@@ -4,6 +4,7 @@ import (
 	"log"
 	"math/big"
 	"math/rand"
+	"strconv"
 	"sync/atomic"
 
 	obtypes "github.com/ethereum/go-ethereum/core/orderbook/v2/types"
@@ -26,8 +27,8 @@ var (
 	cursor uint32
 
 	// User settings
-	baseToken  = "2"
-	quoteToken = "3"
+	baseToken  = "3"
+	quoteToken = "2"
 
 	marketRules = obtypes.NewMarketRules()
 )
@@ -81,7 +82,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 	// 0.95 * 1e18 = 950000000000000000
 	// 0.05 * 1e18 = 50000000000000000 (each side range)
 	// Total range: 0.1 * 1e18 = 100000000000000000
-	minPrice := new(big.Int).Mul(big.NewInt(95), big.NewInt(1e16)) // 0.95 * 1e18
+	minPrice := new(big.Int).Mul(big.NewInt(95), big.NewInt(1e16))   // 0.95 * 1e18
 	priceRange := new(big.Int).Mul(big.NewInt(10), big.NewInt(1e16)) // 0.1 * 1e18
 	randomOffset := new(big.Int).Rand(rand.New(rand.NewSource(rand.Int63())), priceRange)
 	price = new(big.Int).Add(minPrice, randomOffset)
@@ -107,7 +108,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 	// 2 * 1e18 = 2000000000000000000
 	// 1 * 1e18 = 1000000000000000000 (range)
 	minQuantity := new(big.Int).Mul(big.NewInt(2), big.NewInt(1e18)) // 2 * 1e18
-	quantityRange := new(big.Int).SetInt64(1e18) // 1 * 1e18
+	quantityRange := new(big.Int).SetInt64(1e18)                     // 1 * 1e18
 	randomOffset = new(big.Int).Rand(rand.New(rand.NewSource(rand.Int63())), quantityRange)
 	quantity = new(big.Int).Add(minQuantity, randomOffset)
 
@@ -134,11 +135,22 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 		side = obtypes.SELL
 	}
 
+	baseTokenInt := rand.Intn(10) + 3
+	baseToken = strconv.Itoa(baseTokenInt)
+
 	tx, err = from.GenNewOrderTx(baseToken, quoteToken, side, price, quantity, orderType)
 	if err != nil {
 		log.Printf("Failed to generate new order tx: error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
 			err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
 		return err
+	}
+
+	if rand.Intn(1000) == 1 {
+		tx, err = from.GenCancelAllTx()
+		if err != nil {
+			log.Printf("Failed to generate cancel all tx: error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
+				err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
+		}
 	}
 
 	_, err = from.SendTx(cli, tx)
