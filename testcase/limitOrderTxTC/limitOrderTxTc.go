@@ -145,13 +145,13 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 		return err
 	}
 
-	if rand.Intn(1000) == 1 {
-		tx, err = from.GenCancelAllTx()
-		if err != nil {
-			log.Printf("Failed to generate cancel all tx: error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
-				err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
-		}
-	}
+	//if rand.Intn(1000) == 1 {
+	//	tx, err = from.GenCancelAllTx()
+	//	if err != nil {
+	//		log.Printf("Failed to generate cancel all tx: error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d",
+	//			err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
+	//	}
+	//}
 
 	_, err = from.SendTxAsync(cli, tx)
 	if err != nil {
