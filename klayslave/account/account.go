@@ -707,7 +707,7 @@ func (acc *Account) GenCancelAllTx() (*types.Transaction, error) {
 	return tx, nil
 }
 
-func (acc *Account) SendTx(c *ethclient.Client, tx *types.Transaction) (common.Hash, error) {
+func (acc *Account) SendTxAsync(c *ethclient.Client, tx *types.Transaction) (common.Hash, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
@@ -718,6 +718,18 @@ func (acc *Account) SendTx(c *ethclient.Client, tx *types.Transaction) (common.H
 	}
 	//return ec.c.CallContext(ctx, nil, "eth_sendRawTransaction", hexutil.Encode(data))
 	err = c.Client().CallContext(ctx, nil, "eth_sendRawTransactionAsync", hexutil.Encode(data))
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return tx.Hash(), nil
+}
+
+func (acc *Account) SendTx(c *ethclient.Client, tx *types.Transaction) (common.Hash, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	err := c.SendTransaction(ctx, tx)
 	if err != nil {
 		return common.Hash{}, err
 	}

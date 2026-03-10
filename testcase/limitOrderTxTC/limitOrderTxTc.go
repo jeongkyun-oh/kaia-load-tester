@@ -153,7 +153,7 @@ func SendRandomTx(cli *ethclient.Client, from *account.Account) error {
 		}
 	}
 
-	_, err = from.SendTx(cli, tx)
+	_, err = from.SendTxAsync(cli, tx)
 	if err != nil {
 		log.Printf("Failed to send new order tx: error=%v, baseToken=%s, quoteToken=%s, side=%d, price=%s, quantity=%s, orderType=%d\n",
 			err, baseToken, quoteToken, side, price.String(), quantity.String(), orderType)
