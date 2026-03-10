@@ -102,11 +102,11 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 		log.Fatalf("transfer for reservoir failed, localReservoir")
 	}
 
-	targetTokens := []string{"2", "3"}
+	targetTokens := []string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"}
 	if cfg.InTheTcList("ethLegacyTxTC") {
 		targetTokens = []string{}
 	} else if cfg.InTheTcList("tokenTransferTxTC") {
-		targetTokens = []string{"2", "3", "4", "5", "6", "7", "8", "9", "10"}
+		targetTokens = []string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"}
 	}
 
 	// 3. charge KAIA
