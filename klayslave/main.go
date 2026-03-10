@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
@@ -121,30 +122,36 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 		})
 		log.Printf("Finished charging KLAY to %d test account(s)\n", len(accs))
 	} else {
-		// top up tokens to local reservoir
-		for _, token := range targetTokens {
-			tx = globalReservoirAccount.TransferTokenSignedTxWithGuaranteeRetry(cfg.GetGCli(), localReservoirAccount, new(big.Int).Mul(big.NewInt(1e18), big.NewInt(1e18)), token)
-			receipt, err = bind.WaitMined(context.Background(), cfg.GetGCli(), tx)
-			if err != nil {
-				log.Fatalf("receipt failed, err:%v", err.Error())
-			}
-			if receipt.Status != 1 {
-				log.Fatalf("transfer for reservoir failed, localReservoir")
-			}
-		}
-
-		log.Printf("Start charging Tokens [%s] to test accounts", strings.Join(targetTokens, ","))
+		log.Printf("Start charging Tokens [%s] to test accounts in parallel", strings.Join(targetTokens, ","))
 		accs := accGrp.GetValidAccGrp()
 		accs = append(accs, accGrp.GetAccListByName(account.AccListForGaslessRevertTx)...)  // for avoid validation
 		accs = append(accs, accGrp.GetAccListByName(account.AccListForGaslessApproveTx)...) // for avoid validation
+
+		var wg sync.WaitGroup
 		for _, token := range targetTokens {
-			value := new(big.Int).Mul(big.NewInt(1e10), big.NewInt(1e18))
-			gasFee := big.NewInt(25e9 * 21000)
-			account.HierarchicalDistribute(accs, localReservoirAccount, value, gasFee, func(from, to *account.Account, value *big.Int) {
-				from.TransferTokenSignedTxWithGuaranteeRetry(cfg.GetGCli(), to, value, token)
-			})
-			log.Printf("Finished charging Token \"%s\" to %d test account(s)\n", token, len(accs))
+			token := token
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				// top up this token to local reservoir
+				tx := globalReservoirAccount.TransferTokenSignedTxWithGuaranteeRetry(cfg.GetGCli(), localReservoirAccount, new(big.Int).Mul(big.NewInt(1e18), big.NewInt(1e18)), token)
+				receipt, err := bind.WaitMined(context.Background(), cfg.GetGCli(), tx)
+				if err != nil {
+					log.Fatalf("receipt failed, err:%v", err.Error())
+				}
+				if receipt.Status != 1 {
+					log.Fatalf("transfer for reservoir failed, localReservoir")
+				}
+				// distribute to all accounts
+				value := new(big.Int).Mul(big.NewInt(1e10), big.NewInt(1e18))
+				gasFee := big.NewInt(25e9 * 21000)
+				account.HierarchicalDistribute(accs, localReservoirAccount, value, gasFee, func(from, to *account.Account, value *big.Int) {
+					from.TransferTokenSignedTxWithGuaranteeRetry(cfg.GetGCli(), to, value, token)
+				})
+				log.Printf("Finished charging Token \"%s\" to %d test account(s)\n", token, len(accs))
+			}()
 		}
+		wg.Wait()
 	}
 
 	// Wait, charge KAIA happen in 100% of all created test accounts
