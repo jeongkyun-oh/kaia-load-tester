@@ -62,7 +62,7 @@ func Run() {
 		log.Printf("Failed to generate token transfer tx: %v\n", err.Error())
 		return
 	}
-	_, err = from.SendTx(cli, tx)
+	_, err = from.SendTxAsync(cli, tx)
 	elapsed := boomer.Now() - start
 	if err != nil {
 		log.Printf("Failed to send token transfer tx: %v\n", err.Error())
