@@ -10,6 +10,7 @@ import (
 	"github.com/kaiachain/kaia-load-tester/testcase/limitOrderTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/marketOrderTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/sessionTxTC"
+	"github.com/kaiachain/kaia-load-tester/testcase/singleLimitOrderTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/stopOrderTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/tokenTransferTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/tpslOrderTxSlTC"
@@ -56,6 +57,12 @@ var TcList = map[string]*ExtendedTask{
 		Weight: 10,
 		Fn:     limitOrderTxTC.Run,
 		Init:   limitOrderTxTC.Init,
+	},
+	singleLimitOrderTxTC.Name: {
+		Name:   singleLimitOrderTxTC.Name,
+		Weight: 10,
+		Fn:     singleLimitOrderTxTC.Run,
+		Init:   singleLimitOrderTxTC.Init,
 	},
 	limitOrderLPTxTC.Name: {
 		Name:   limitOrderLPTxTC.Name,
