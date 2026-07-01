@@ -92,14 +92,20 @@ func Init(accs []*account.Account, endpoint string, _ *big.Int) {
 // the aggressive side (buy@HIGH, sell@LOW) and crosses whatever resting maker sits on
 // the opposite edge (canMatchLimit: BUY crosses when price>=ask, SELL when price<=bid).
 // Role is a 50/50 coin flip, so on average half the orders trade and half rest as makers.
+//
+// Each account is pinned to a single side (even index = BUY-only, odd index = SELL-only).
+// A match requires opposite sides, so an account can never cross its own resting order;
+// this makes self-trades impossible, so the node never rejects one. Needs >= 2 accounts
+// for takers to find opposite-side liquidity.
 func Run() {
 	cli := cliPool.Alloc().(*ethclient.Client)
 	defer cliPool.Free(cli)
 
 	var (
-		from     = accGrp[atomic.AddUint32(&cursor, 1)%uint32(nAcc)]
+		idx      = atomic.AddUint32(&cursor, 1) % uint32(nAcc)
+		from     = accGrp[idx]
 		quantity = scaleUp(1)
-		side     = uint8(rand.Intn(2))
+		side     = accountSide(idx)
 		role     = rand.Intn(2)
 
 		refAligned = new(big.Int).Mul(new(big.Int).Div(refPrice, tickSize), tickSize)
@@ -140,4 +146,14 @@ func Run() {
 
 func scaleUp(x int64) *big.Int {
 	return new(big.Int).Mul(big.NewInt(x), big.NewInt(1e18))
+}
+
+// accountSide pins an account (by its slot index) to a single order side: even
+// indices trade BUY-only, odd indices SELL-only. Because a match needs opposite
+// sides, an account never crosses its own order, so no self-trade is ever generated.
+func accountSide(idx uint32) uint8 {
+	if idx%2 == 0 {
+		return sideBuy
+	}
+	return sideSell
 }

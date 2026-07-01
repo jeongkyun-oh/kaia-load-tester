@@ -57,3 +57,17 @@ func TestMakerRestsTakerCrosses(t *testing.T) {
 	// Taker SELL at LOW hits a resting bid at LOW: sell <= bid -> crosses.
 	assert.LessOrEqual(t, low.Cmp(makerBid), 0, "taker sell must cross the resting bid")
 }
+
+// TestNoSelfTrade asserts each account is pinned to one side (even=BUY, odd=SELL),
+// so an account can never cross its own order and the node never rejects a self-trade.
+func TestNoSelfTrade(t *testing.T) {
+	for idx := uint32(0); idx < 8; idx++ {
+		if idx%2 == 0 {
+			assert.Equal(t, sideBuy, accountSide(idx), "even index must be BUY-only")
+		} else {
+			assert.Equal(t, sideSell, accountSide(idx), "odd index must be SELL-only")
+		}
+	}
+	// Adjacent accounts take opposite sides, so takers always face a different account.
+	assert.NotEqual(t, accountSide(0), accountSide(1), "buy and sell accounts must be disjoint")
+}
