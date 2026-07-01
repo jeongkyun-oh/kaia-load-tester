@@ -177,7 +177,7 @@ func (acc *Account) NewSessionCreateCtx(expiresAt uint64, nonce uint64) (*types.
 		ExpiresAt: expiresAt,
 		Nonce:     nonce,
 	}
-	typedData := types.ToTypedData(&session)
+	typedData := types.ToSessionTypedData(&session, types.SessionCreate, types.OrderbookVersion3)
 	_, sigHash, _ := types.SignEip712(typedData)
 	sig, err := crypto.Sign(sigHash, acc.privateKey)
 	if err != nil {
@@ -201,7 +201,7 @@ func (acc *Account) NewSessionDeleteCtx(i int, nonce uint64) (*types.SessionCont
 		ExpiresAt: target.Session.ExpiresAt,
 		Nonce:     nonce,
 	}
-	typedData := types.ToTypedData(&session)
+	typedData := types.ToSessionTypedData(&session, types.SessionDelete, types.OrderbookVersion3)
 	_, sigHash, _ := types.SignEip712(typedData)
 	sig, err := crypto.Sign(sigHash, acc.privateKey)
 	if err != nil {
@@ -686,6 +686,143 @@ func (acc *Account) GenCancelAllTx() (*types.Transaction, error) {
 	acc.timenonce++
 
 	ctx := acc.NewCancelAllCtx()
+
+	signer := types.LatestSignerForChainID(chainID)
+	input, err := types.WrapTxAsInput(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx := types.NewTransaction(
+		acc.timenonce,
+		types.DexAddress,
+		common.Big0,
+		0,
+		common.Big0,
+		input,
+	)
+
+	tx, err = types.SignTx(tx, signer, acc.privateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+}
+
+// NewPerpDepositCtx builds a PerpDeposit (0x12) command that moves `amount` of
+// `token` from the L1 owner's spot wallet into its perp margin wallet. Authorized
+// by the outer tx signature (sender == L1Owner), so no separate L1Signature is set.
+func (acc *Account) NewPerpDepositCtx(token string, amount *big.Int) *types.PerpDepositContext {
+	return &types.PerpDepositContext{
+		L1Owner: acc.GetAddress(),
+		Token:   token,
+		Amount:  amount,
+	}
+}
+
+// GenPerpDepositTx generates a signed PerpDeposit tx. Mirrors GenTokenTransferTx's
+// time-based nonce handling since it is the first DEX command per account.
+func (acc *Account) GenPerpDepositTx(token string, amount *big.Int) (*types.Transaction, error) {
+	acc.mutex.Lock()
+	defer acc.mutex.Unlock()
+
+	if acc.timenonce == 0 {
+		acc.timenonce = uint64(time.Now().UnixMilli())
+	}
+	acc.timenonce++
+
+	ctx := acc.NewPerpDepositCtx(token, amount)
+
+	signer := types.LatestSignerForChainID(chainID)
+	input, err := types.WrapTxAsInput(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx := types.NewTransaction(
+		acc.timenonce,
+		types.DexAddress,
+		common.Big0,
+		0,
+		common.Big0,
+		input,
+	)
+
+	tx, err = types.SignTx(tx, signer, acc.privateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+}
+
+// PerpDepositWithGuaranteeRetry keeps sending a PerpDeposit until it is mined
+// successfully. Mirrors TransferTokenSignedTxWithGuaranteeRetry, used during setup.
+func (acc *Account) PerpDepositWithGuaranteeRetry(c *ethclient.Client, token string, amount *big.Int) *types.Transaction {
+	var (
+		err error
+		tx  *types.Transaction
+	)
+
+	for {
+		tx, err = acc.GenPerpDepositTx(token, amount)
+		if err != nil {
+			log.Printf("Failed to generate perp deposit: err=%v, from=%v, token=%v, amount=%v",
+				err.Error(), acc.GetAddress().String(), token, amount.String())
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		_, err = acc.SendTx(c, tx)
+		if err != nil {
+			log.Printf("Failed to send perp deposit tx: err=%v, from=%v, token=%v, amount=%v",
+				err.Error(), acc.GetAddress().String(), token, amount.String())
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		receipt, err := c.TransactionReceipt(context.Background(), tx.Hash())
+		if err != nil {
+			log.Printf("Failed to fetch receipt of perp deposit tx %s: err=%v, from=%v, token=%v, amount=%v",
+				tx.Hash().String(), err.Error(), acc.GetAddress().String(), token, amount.String())
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		if receipt.Status != types.ReceiptStatusSuccessful {
+			log.Printf("Perp deposit tx %s failed with status %d, from=%v, token=%v, amount=%v",
+				tx.Hash().String(), receipt.Status, acc.GetAddress().String(), token, amount.String())
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		break
+	}
+
+	return tx
+}
+
+// NewPerpOrderCtx builds a PerpOrder (0x41) command. price/quantity are 18-decimal
+// fixed-point big.Int (the type's JSON marshaler renders them as decimal strings).
+func (acc *Account) NewPerpOrderCtx(marketId uint64, side uint8, price, quantity *big.Int, tif uint8) *types.PerpOrderContext {
+	return &types.PerpOrderContext{
+		L1Owner:     acc.GetAddress(),
+		MarketId:    marketId,
+		Side:        side,
+		Price:       price,
+		Quantity:    quantity,
+		TimeInForce: tif,
+	}
+}
+
+// GenNewPerpOrderTx generates a signed PerpOrder tx (mirrors GenNewOrderTx).
+func (acc *Account) GenNewPerpOrderTx(marketId uint64, side uint8, price, quantity *big.Int, tif uint8) (*types.Transaction, error) {
+	acc.mutex.Lock()
+	defer acc.mutex.Unlock()
+
+	if acc.timenonce == 0 {
+		acc.timenonce = uint64(time.Now().UnixMilli())
+	}
+	acc.timenonce++
+
+	ctx := acc.NewPerpOrderCtx(marketId, side, price, quantity, tif)
 
 	signer := types.LatestSignerForChainID(chainID)
 	input, err := types.WrapTxAsInput(ctx)

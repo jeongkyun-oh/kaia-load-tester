@@ -37,4 +37,4 @@ node_modules/
 *.txt
 
 .tool-versions
-
+.omc

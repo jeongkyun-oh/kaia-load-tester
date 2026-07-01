@@ -32,6 +32,11 @@ type Config struct {
 	testTokenAddress string
 	gsrAddress       string
 
+	// perp (perpNoTradeTxTC)
+	perpMarketId uint64
+	perpRefPrice float64 // reference (~mark) price in human units
+	perpTickSize float64 // market price tick in human units
+
 	chargeKLAYAmount  float64
 	chargeParallelNum int
 	batchSize         int
@@ -87,6 +92,9 @@ func (cfg *Config) setConfigsFromFlag(ctx *cli.Context) {
 	cfg.richWalletPrivateKey = ctx.String("key")
 	cfg.testTokenAddress = ctx.String("testTokenAddr")
 	cfg.gsrAddress = ctx.String("gsrAddr")
+	cfg.perpMarketId = ctx.Uint64("perpMarketId")
+	cfg.perpRefPrice = ctx.Float64("perpRefPrice")
+	cfg.perpTickSize = ctx.Float64("perpTickSize")
 
 	// Do not allow null richWalletPrivateKey
 	if cfg.richWalletPrivateKey == "" {
@@ -203,18 +211,48 @@ func (cfg *Config) GetExtendedTasks() []*testcase.ExtendedTask {
 	return tasks
 }
 
-func (cfg *Config) GetChainID() *big.Int            { return cfg.chainID }
-func (cfg *Config) GetGasPrice() *big.Int           { return cfg.gasPrice }
-func (cfg *Config) GetBaseFee() *big.Int            { return cfg.baseFee }
-func (cfg *Config) GetBatchSize() int               { return cfg.batchSize }
-func (cfg *Config) GetNUserForUnsigned() int        { return cfg.nUserForUnsigned }
-func (cfg *Config) GetNUserForSigned() int          { return cfg.nUserForSigned }
-func (cfg *Config) GetNUserForNewAccounts() int     { return cfg.nUserForNewAccounts }
-func (cfg *Config) GetGEndpoint() string            { return cfg.gEndpoint }
-func (cfg *Config) GetActiveUserPercent() int       { return cfg.activeUserPercent }
-func (cfg *Config) GetTcStrList() []string          { return cfg.tcNameList }
-func (cfg *Config) GetTestTokenAddress() string     { return cfg.testTokenAddress }
-func (cfg *Config) GetGsrAddress() string           { return cfg.gsrAddress }
+func (cfg *Config) GetChainID() *big.Int        { return cfg.chainID }
+func (cfg *Config) GetGasPrice() *big.Int       { return cfg.gasPrice }
+func (cfg *Config) GetBaseFee() *big.Int        { return cfg.baseFee }
+func (cfg *Config) GetBatchSize() int           { return cfg.batchSize }
+func (cfg *Config) GetNUserForUnsigned() int    { return cfg.nUserForUnsigned }
+func (cfg *Config) GetNUserForSigned() int      { return cfg.nUserForSigned }
+func (cfg *Config) GetNUserForNewAccounts() int { return cfg.nUserForNewAccounts }
+func (cfg *Config) GetGEndpoint() string        { return cfg.gEndpoint }
+func (cfg *Config) GetActiveUserPercent() int   { return cfg.activeUserPercent }
+func (cfg *Config) GetTcStrList() []string      { return cfg.tcNameList }
+func (cfg *Config) GetTestTokenAddress() string { return cfg.testTokenAddress }
+func (cfg *Config) GetGsrAddress() string       { return cfg.gsrAddress }
+func (cfg *Config) GetPerpMarketId() uint64     { return cfg.perpMarketId }
+
+// GetPerpRefPrice converts the human perpRefPrice flag into an 18-decimal
+// fixed-point big.Int. Returns nil when unset (0) so callers keep their default.
+func (cfg *Config) GetPerpRefPrice() *big.Int {
+	if cfg.perpRefPrice <= 0 {
+		return nil
+	}
+	return humanToScaled(cfg.perpRefPrice)
+}
+
+// GetPerpTickSize converts the human perpTickSize flag into an 18-decimal
+// fixed-point big.Int. Returns nil when unset (0) so callers keep their default.
+func (cfg *Config) GetPerpTickSize() *big.Int {
+	if cfg.perpTickSize <= 0 {
+		return nil
+	}
+	return humanToScaled(cfg.perpTickSize)
+}
+
+// humanToScaled converts a human decimal value to 18-decimal fixed-point.
+func humanToScaled(v float64) *big.Int {
+	f := new(big.Float).Mul(
+		new(big.Float).SetInt64(params.Ether),
+		new(big.Float).SetFloat64(v),
+	)
+	i := new(big.Int)
+	f.Int(i)
+	return i
+}
 func (cfg *Config) GetRichWalletPrivateKey() string { return cfg.richWalletPrivateKey }
 func (cfg *Config) GetGCli() *ethclient.Client      { return cfg.gCli }
 func (cfg *Config) InTheTcList(tcName string) bool {
@@ -255,6 +293,9 @@ var Flags = []cli.Flag{
 	cli.StringFlag{Name: "weights", Value: "", Usage: "weights which user want to run, multiple weights are separated by comma."},
 	cli.StringFlag{Name: "testTokenAddr", Value: "", Usage: "Address of TestToken Contract"},
 	cli.StringFlag{Name: "gsrAddr", Value: "", Usage: "Address of Gasless Swap Router"},
+	cli.Uint64Flag{Name: "perpMarketId", Value: 1, Usage: "perp market id for perpNoTradeTxTC (must be pre-registered on the target L2)"},
+	cli.Float64Flag{Name: "perpRefPrice", Value: 0, Usage: "reference (~mark) price in human units for perpNoTradeTxTC; buys rest below and sells above it"},
+	cli.Float64Flag{Name: "perpTickSize", Value: 0, Usage: "market price tick in human units for perpNoTradeTxTC; order prices are aligned to this (default 1.0)"},
 }
 
 var BoomerFlags = []cli.Flag{

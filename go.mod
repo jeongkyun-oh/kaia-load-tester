@@ -91,4 +91,4 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
-replace github.com/ethereum/go-ethereum => github.com/kaiachain/go-ethereum v0.0.0-20260124081455-feec83ca9c01
+replace github.com/ethereum/go-ethereum => github.com/kaiachain/go-ethereum v0.0.0-20260630112202-52462f69de86
