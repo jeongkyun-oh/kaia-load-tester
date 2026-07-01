@@ -18,6 +18,7 @@ import (
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
 	"github.com/kaiachain/kaia-load-tester/klayslave/config"
 	"github.com/kaiachain/kaia-load-tester/testcase"
+	"github.com/kaiachain/kaia-load-tester/testcase/perpHalfFillTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/perpNoTradeTxTC"
 	"github.com/myzhan/boomer"
 	"github.com/urfave/cli"
@@ -159,20 +160,29 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 	// But, from here including prepareTestContracts like MintERC721, only 20% of account happens
 	accGrp.SetAccGrpByActivePercent(cfg.GetActiveUserPercent())
 
-	// Fund perp margin for perpNoTradeTxTC: each active account moves USDT (token "2",
-	// the only genesis-whitelisted perp deposit token) from its spot wallet into its
-	// perp wallet so that resting orders have order margin. Mirrors the spot token
-	// charging pre-work above; the accounts already hold USDT from that step.
-	if cfg.InTheTcList(perpNoTradeTxTC.Name) {
-		perpNoTradeTxTC.SetMarketId(cfg.GetPerpMarketId())
-		perpNoTradeTxTC.SetRefPrice(cfg.GetPerpRefPrice())
-		perpNoTradeTxTC.SetTickSize(cfg.GetPerpTickSize())
+	// Perp test cases (perpNoTradeTxTC, perpHalfFillTxTC) share the same market and
+	// margin setup: inject the market id / reference price / tick size, then move USDT
+	// (token "2", the only genesis-whitelisted perp deposit token) from each active
+	// account's spot wallet into its perp wallet so orders have order margin. Mirrors
+	// the spot token charging pre-work above; the accounts already hold USDT from it.
+	if cfg.InTheTcList(perpNoTradeTxTC.Name) || cfg.InTheTcList(perpHalfFillTxTC.Name) {
+		mktId, ref, tick := cfg.GetPerpMarketId(), cfg.GetPerpRefPrice(), cfg.GetPerpTickSize()
+		if cfg.InTheTcList(perpNoTradeTxTC.Name) {
+			perpNoTradeTxTC.SetMarketId(mktId)
+			perpNoTradeTxTC.SetRefPrice(ref)
+			perpNoTradeTxTC.SetTickSize(tick)
+		}
+		if cfg.InTheTcList(perpHalfFillTxTC.Name) {
+			perpHalfFillTxTC.SetMarketId(mktId)
+			perpHalfFillTxTC.SetRefPrice(ref)
+			perpHalfFillTxTC.SetTickSize(tick)
+		}
 
-		// Generous margin so resting no-trade orders never exhaust available balance
-		// during a run. Must not exceed each account's charged USDT spot balance.
+		// Generous margin so orders never exhaust available balance during a run.
+		// Must not exceed each account's charged USDT spot balance.
 		perpDepositAmount := new(big.Int).Mul(big.NewInt(1e9), big.NewInt(1e18))
 		accs := accGrp.GetValidAccGrp()
-		log.Printf("Start perp-depositing USDT to %d test account(s) for perpNoTradeTxTC", len(accs))
+		log.Printf("Start perp-depositing USDT to %d test account(s)", len(accs))
 		var wg sync.WaitGroup
 		for _, acc := range accs {
 			acc := acc
