@@ -81,6 +81,21 @@ func RunAction(ctx *cli.Context) {
 func setSmartContractAddressPerPackage(a *account.AccGroup) {
 }
 
+// onlyPerpTCs reports whether every enabled test case is a perp one. Perp orders
+// only need the USDT margin token, so setup can skip charging the other tokens.
+func onlyPerpTCs(cfg *config.Config) bool {
+	tcs := cfg.GetTcStrList()
+	if len(tcs) == 0 {
+		return false
+	}
+	for _, name := range tcs {
+		if name != perpNoTradeTxTC.Name && name != perpHalfFillTxTC.Name {
+			return false
+		}
+	}
+	return true
+}
+
 // createTestAccGroupsAndPrepareContracts do every init steps before task.Init
 // those steps are about deploying test contracts and
 func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.AccGroup) *account.Account {
@@ -108,6 +123,10 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 	targetTokens := []string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"}
 	if cfg.InTheTcList("ethLegacyTxTC") {
 		targetTokens = []string{}
+	} else if onlyPerpTCs(cfg) {
+		// Perp test cases only need the USDT margin token ("2"); charging tokens
+		// 3-15 to every account is pure setup overhead, so skip them.
+		targetTokens = []string{"2"}
 	} else if cfg.InTheTcList("tokenTransferTxTC") {
 		targetTokens = []string{"2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"}
 	}
