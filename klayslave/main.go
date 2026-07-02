@@ -225,7 +225,24 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 			perpVaultMMTxTC.SetRefPrice(ref)
 			perpVaultMMTxTC.SetTickSize(tick)
 
-			owner := accs[0] // funded with USDT (perp-deposited above) + KAIA for gas
+			owner := accs[0] // funded with USDT (perp-deposited above) + KAIA for gas (funded below)
+
+			// vaultsetup.Deploy sends real gas-paying EVM txs (deploy impl, deploy proxy,
+			// deposit, N x addExecutor) from owner. Unlike other perp TCs (Gas=0 dex-command
+			// txs), these need native KAIA, which the else-branch token charging above does
+			// not provide. Fund owner directly from the rich account before deploying.
+			kaiaForGas := new(big.Int).Mul(big.NewInt(1000), big.NewInt(1e18))
+			log.Printf("Funding vault owner %s with KAIA for gas", owner.GetAddress().Hex())
+			kaiaTx := globalReservoirAccount.TransferSignedTxWithGuaranteeRetry(cfg.GetGCli(), owner, kaiaForGas)
+			kaiaReceipt, err := bind.WaitMined(context.Background(), cfg.GetGCli(), kaiaTx)
+			if err != nil {
+				log.Fatalf("receipt failed, err:%v", err.Error())
+			}
+			if kaiaReceipt.Status != 1 {
+				log.Fatalf("KAIA funding for vault owner failed")
+			}
+			log.Printf("Funded vault owner %s with KAIA for gas", owner.GetAddress().Hex())
+
 			log.Printf("Deploying PerpVault + %d executors (owner=%s)", cfg.GetVaultExecutorCount(), owner.GetAddress().Hex())
 			vault, execKeys, err := vaultsetup.Deploy(
 				cfg.GetGCli(), owner,
