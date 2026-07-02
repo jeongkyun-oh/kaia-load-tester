@@ -1100,3 +1100,44 @@ func HierarchicalDistribute(accs []*Account, from *Account, value *big.Int, gasF
 func (acc *Account) PrivateKey() *ecdsa.PrivateKey {
 	return acc.privateKey
 }
+
+// TransactOpts returns bind.TransactOpts for signing EVM contract txs (deploy,
+// addExecutor, deposit) with this account's key. Nonce/gas are managed by the
+// backend at send time.
+func (acc *Account) TransactOpts() (*bind.TransactOpts, error) {
+	return bind.NewKeyedTransactorWithChainID(acc.privateKey, chainID)
+}
+
+// GenPerpOrderTxBySession builds a PerpOrder dex-command tx authorized as a Path-C
+// session key: L1Owner is set to `l1owner` (the vault), and the OUTER tx is signed
+// by `sessionKey` (the executor). Mirrors GenNewPerpOrderTx otherwise.
+func (acc *Account) GenPerpOrderTxBySession(sessionKey *ecdsa.PrivateKey, l1owner common.Address, marketId uint64, side uint8, price, quantity *big.Int, tif uint8) (*types.Transaction, error) {
+	acc.mutex.Lock()
+	defer acc.mutex.Unlock()
+
+	if acc.timenonce == 0 {
+		acc.timenonce = uint64(time.Now().UnixMilli())
+	}
+	acc.timenonce++
+
+	ctx := &types.PerpOrderContext{
+		L1Owner:     l1owner,
+		MarketId:    marketId,
+		Side:        side,
+		Price:       price,
+		Quantity:    quantity,
+		TimeInForce: tif,
+	}
+
+	signer := types.LatestSignerForChainID(chainID)
+	input, err := types.WrapTxAsInput(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tx := types.NewTransaction(acc.timenonce, types.DexAddress, common.Big0, 0, common.Big0, input)
+	tx, err = types.SignTx(tx, signer, sessionKey)
+	if err != nil {
+		return nil, err
+	}
+	return tx, nil
+}
