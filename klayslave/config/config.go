@@ -37,6 +37,11 @@ type Config struct {
 	perpRefPrice float64 // reference (~mark) price in human units
 	perpTickSize float64 // market price tick in human units
 
+	vaultExecutorCount int
+	vaultDepositAmount float64 // human units; scaled to 18 decimals by accessor
+	vaultLockupPeriod  int64   // seconds; 0 → contract default
+	vaultTokenId       string  // perp margin tokenId (default "2" = USDT)
+
 	chargeKLAYAmount  float64
 	chargeParallelNum int
 	batchSize         int
@@ -95,6 +100,10 @@ func (cfg *Config) setConfigsFromFlag(ctx *cli.Context) {
 	cfg.perpMarketId = ctx.Uint64("perpMarketId")
 	cfg.perpRefPrice = ctx.Float64("perpRefPrice")
 	cfg.perpTickSize = ctx.Float64("perpTickSize")
+	cfg.vaultExecutorCount = ctx.Int("vaultExecutorCount")
+	cfg.vaultDepositAmount = ctx.Float64("vaultDepositAmount")
+	cfg.vaultLockupPeriod = ctx.Int64("vaultLockupPeriod")
+	cfg.vaultTokenId = ctx.String("vaultTokenId")
 
 	// Do not allow null richWalletPrivateKey
 	if cfg.richWalletPrivateKey == "" {
@@ -243,6 +252,23 @@ func (cfg *Config) GetPerpTickSize() *big.Int {
 	return humanToScaled(cfg.perpTickSize)
 }
 
+func (cfg *Config) GetVaultExecutorCount() int { return cfg.vaultExecutorCount }
+func (cfg *Config) GetVaultTokenId() string    { return cfg.vaultTokenId }
+
+// GetVaultDepositAmount converts the human vaultDepositAmount flag into an
+// 18-decimal fixed-point big.Int. Defaults to 1e6 USDT when unset (<=0).
+func (cfg *Config) GetVaultDepositAmount() *big.Int {
+	if cfg.vaultDepositAmount <= 0 {
+		return new(big.Int).Mul(big.NewInt(1000000), big.NewInt(1e18)) // default 1e6 USDT
+	}
+	return humanToScaled(cfg.vaultDepositAmount)
+}
+
+// GetVaultLockupPeriod returns the vault withdraw/redeem lockup in seconds.
+func (cfg *Config) GetVaultLockupPeriod() *big.Int {
+	return big.NewInt(cfg.vaultLockupPeriod)
+}
+
 // humanToScaled converts a human decimal value to 18-decimal fixed-point.
 func humanToScaled(v float64) *big.Int {
 	f := new(big.Float).Mul(
@@ -296,6 +322,10 @@ var Flags = []cli.Flag{
 	cli.Uint64Flag{Name: "perpMarketId", Value: 1, Usage: "perp market id for perpNoTradeTxTC (must be pre-registered on the target L2)"},
 	cli.Float64Flag{Name: "perpRefPrice", Value: 0, Usage: "reference (~mark) price in human units for perpNoTradeTxTC; buys rest below and sells above it"},
 	cli.Float64Flag{Name: "perpTickSize", Value: 0, Usage: "market price tick in human units for perpNoTradeTxTC; order prices are aligned to this (default 1.0)"},
+	cli.IntFlag{Name: "vaultExecutorCount", Value: 10, Usage: "number of executor session keys to register on the vault for perpVaultMMTxTC"},
+	cli.Float64Flag{Name: "vaultDepositAmount", Value: 0, Usage: "USDT (human units) the owner deposits into the vault as perp margin; 0 → 1e6"},
+	cli.Int64Flag{Name: "vaultLockupPeriod", Value: 0, Usage: "vault withdraw/redeem lockup seconds; 0 → contract default"},
+	cli.StringFlag{Name: "vaultTokenId", Value: "2", Usage: "perp margin tokenId for the vault (default 2 = USDT)"},
 }
 
 var BoomerFlags = []cli.Flag{
