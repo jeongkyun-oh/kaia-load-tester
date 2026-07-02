@@ -17,9 +17,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/kaiachain/kaia-load-tester/klayslave/account"
 	"github.com/kaiachain/kaia-load-tester/klayslave/config"
+	"github.com/kaiachain/kaia-load-tester/klayslave/vaultsetup"
 	"github.com/kaiachain/kaia-load-tester/testcase"
 	"github.com/kaiachain/kaia-load-tester/testcase/perpHalfFillTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/perpNoTradeTxTC"
+	"github.com/kaiachain/kaia-load-tester/testcase/perpVaultMMTxTC"
 	"github.com/myzhan/boomer"
 	"github.com/urfave/cli"
 )
@@ -89,7 +91,7 @@ func onlyPerpTCs(cfg *config.Config) bool {
 		return false
 	}
 	for _, name := range tcs {
-		if name != perpNoTradeTxTC.Name && name != perpHalfFillTxTC.Name {
+		if name != perpNoTradeTxTC.Name && name != perpHalfFillTxTC.Name && name != perpVaultMMTxTC.Name {
 			return false
 		}
 	}
@@ -179,12 +181,13 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 	// But, from here including prepareTestContracts like MintERC721, only 20% of account happens
 	accGrp.SetAccGrpByActivePercent(cfg.GetActiveUserPercent())
 
-	// Perp test cases (perpNoTradeTxTC, perpHalfFillTxTC) share the same market and
-	// margin setup: inject the market id / reference price / tick size, then move USDT
-	// (token "2", the only genesis-whitelisted perp deposit token) from each active
-	// account's spot wallet into its perp wallet so orders have order margin. Mirrors
-	// the spot token charging pre-work above; the accounts already hold USDT from it.
-	if cfg.InTheTcList(perpNoTradeTxTC.Name) || cfg.InTheTcList(perpHalfFillTxTC.Name) {
+	// Perp test cases (perpNoTradeTxTC, perpHalfFillTxTC, perpVaultMMTxTC) share the same
+	// market and margin setup: inject the market id / reference price / tick size, then
+	// move USDT (token "2", the only genesis-whitelisted perp deposit token) from each
+	// active account's spot wallet into its perp wallet so orders have order margin.
+	// Mirrors the spot token charging pre-work above; the accounts already hold USDT
+	// from it.
+	if cfg.InTheTcList(perpNoTradeTxTC.Name) || cfg.InTheTcList(perpHalfFillTxTC.Name) || cfg.InTheTcList(perpVaultMMTxTC.Name) {
 		mktId, ref, tick := cfg.GetPerpMarketId(), cfg.GetPerpRefPrice(), cfg.GetPerpTickSize()
 		if cfg.InTheTcList(perpNoTradeTxTC.Name) {
 			perpNoTradeTxTC.SetMarketId(mktId)
@@ -213,6 +216,30 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 		}
 		wg.Wait()
 		log.Printf("Finished perp-depositing USDT to %d test account(s)", len(accs))
+
+		// perpVaultMMTxTC needs an on-chain PerpVault plus a set of registered executor
+		// session keys before it can run: deploy the vault, deposit owner margin into
+		// it, and register the executors, then hand the vault + keys to the TC.
+		if cfg.InTheTcList(perpVaultMMTxTC.Name) {
+			perpVaultMMTxTC.SetMarketId(mktId)
+			perpVaultMMTxTC.SetRefPrice(ref)
+			perpVaultMMTxTC.SetTickSize(tick)
+
+			owner := accs[0] // funded with USDT (perp-deposited above) + KAIA for gas
+			log.Printf("Deploying PerpVault + %d executors (owner=%s)", cfg.GetVaultExecutorCount(), owner.GetAddress().Hex())
+			vault, execKeys, err := vaultsetup.Deploy(
+				cfg.GetGCli(), owner,
+				cfg.GetVaultTokenId(), "LoadTestVault", "LTV",
+				cfg.GetVaultLockupPeriod(), cfg.GetVaultDepositAmount(),
+				cfg.GetVaultExecutorCount(),
+				mktId, // marketId: restricts registered executors to this market
+			)
+			if err != nil {
+				log.Fatalf("PerpVault setup failed: %v", err)
+			}
+			perpVaultMMTxTC.SetVault(vault, execKeys)
+			log.Printf("PerpVault ready: vault=%s executors=%d", vault.Hex(), len(execKeys))
+		}
 	}
 
 	// Set SmartContractAddress value in each packages if needed
