@@ -33,9 +33,14 @@ func waitMined(cli *ethclient.Client, tx *types.Transaction, what string) error 
 }
 
 // Deploy performs the full per-slave vault setup: deploy impl + proxy(initialize),
-// deposit margin, and register `execCount` fresh executor keys restricted to
-// `marketId` (PerpOnly permission).
-func Deploy(cli *ethclient.Client, owner *account.Account, tokenId, name, symbol string, lockup, deposit *big.Int, execCount int, marketId uint64) (common.Address, []*ecdsa.PrivateKey, error) {
+// deposit margin, set the vault risk caps, and register `execCount` fresh executor
+// keys restricted to `marketId` (PerpOnly permission).
+//
+// marketCap (18-decimal notional) and maxUtilBps (BPS, 10000 = 100%) opt the vault
+// into checkVaultLimits' notional / margin-utilization enforcement; initialize()
+// leaves both slots 0 = unlimited, which makes checkVaultLimits early-return and
+// carry no load. Pass nil to skip either one and keep it unlimited.
+func Deploy(cli *ethclient.Client, owner *account.Account, tokenId, name, symbol string, lockup, deposit *big.Int, execCount int, marketId uint64, marketCap, maxUtilBps *big.Int) (common.Address, []*ecdsa.PrivateKey, error) {
 	tid, ok := new(big.Int).SetString(tokenId, 10)
 	if !ok {
 		return common.Address{}, nil, fmt.Errorf("invalid tokenId %q", tokenId)
@@ -100,7 +105,35 @@ func Deploy(cli *ethclient.Client, owner *account.Account, tokenId, name, symbol
 		return common.Address{}, nil, err
 	}
 
-	// 5) register executors, restricted to the single target perp market
+	// 5) set the vault risk caps so orders exercise checkVaultLimits
+	if marketCap != nil {
+		authC, err := owner.TransactOpts()
+		if err != nil {
+			return common.Address{}, nil, err
+		}
+		capTx, err := vault.SetMarketRules(authC, []uint64{marketId}, []*big.Int{marketCap})
+		if err != nil {
+			return common.Address{}, nil, fmt.Errorf("setMarketRules: %w", err)
+		}
+		if err := waitMined(cli, capTx, "setMarketRules"); err != nil {
+			return common.Address{}, nil, err
+		}
+	}
+	if maxUtilBps != nil {
+		authU, err := owner.TransactOpts()
+		if err != nil {
+			return common.Address{}, nil, err
+		}
+		utilTx, err := vault.SetMaxMarginUtilization(authU, maxUtilBps)
+		if err != nil {
+			return common.Address{}, nil, fmt.Errorf("setMaxMarginUtilization: %w", err)
+		}
+		if err := waitMined(cli, utilTx, "setMaxMarginUtilization"); err != nil {
+			return common.Address{}, nil, err
+		}
+	}
+
+	// 6) register executors, restricted to the single target perp market
 	expiresAt := uint64(time.Now().Unix()) + 180*24*60*60 // 180d cap
 	allowedMarkets := []uint64{marketId}
 	execKeys := make([]*ecdsa.PrivateKey, 0, execCount)
