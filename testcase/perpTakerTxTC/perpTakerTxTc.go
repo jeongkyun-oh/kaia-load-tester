@@ -87,12 +87,29 @@ func Init(accs []*account.Account, endpoint string, _ *big.Int) {
 // aligned reference (lifting a resting ask at ref+tick), a taker SELL one tick BELOW
 // (hitting a resting bid at ref-tick). This is the opposite of the maker (perpNoTradeTxTC)
 // convention, so a taker order crosses the maker liquidity resting between the two levels.
+// When refPrice <= tickSize the sell level would be zero or negative, which the node
+// rejects; it is clamped to the smallest valid tick level instead.
 func takerPrice(side uint8) *big.Int {
 	refAligned := new(big.Int).Mul(new(big.Int).Div(refPrice, tickSize), tickSize)
 	if side == sideBuy {
 		return new(big.Int).Add(refAligned, tickSize)
 	}
-	return new(big.Int).Sub(refAligned, tickSize)
+	sell := new(big.Int).Sub(refAligned, tickSize)
+	if sell.Sign() <= 0 {
+		return new(big.Int).Set(tickSize)
+	}
+	return sell
+}
+
+// accountSide pins an account (by its slot index) to a single order side: even
+// indices trade BUY-only, odd indices SELL-only (same invariant as perpHalfFillTxTC).
+// A GTC remainder can rest on the book, and a match needs opposite sides, so a
+// pinned account can never cross its own resting order: self-trades are impossible.
+func accountSide(idx uint32) uint8 {
+	if idx%2 == 0 {
+		return sideBuy
+	}
+	return sideSell
 }
 
 func Run() {
@@ -102,8 +119,9 @@ func Run() {
 	cli := cliPool.Alloc().(*ethclient.Client)
 	defer cliPool.Free(cli)
 
-	from := accGrp[atomic.AddUint32(&cursor, 1)%uint32(nAcc)]
-	side := uint8(rand.Intn(2))
+	idx := atomic.AddUint32(&cursor, 1) % uint32(nAcc)
+	from := accGrp[idx]
+	side := accountSide(idx)
 	tif := takerTifs[rand.Intn(len(takerTifs))]
 	price := takerPrice(side)
 	quantity := scaleUp(1)
