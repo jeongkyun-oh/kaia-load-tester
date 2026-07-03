@@ -21,6 +21,7 @@ import (
 	"github.com/kaiachain/kaia-load-tester/testcase"
 	"github.com/kaiachain/kaia-load-tester/testcase/perpHalfFillTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/perpNoTradeTxTC"
+	"github.com/kaiachain/kaia-load-tester/testcase/perpTakerTxTC"
 	"github.com/kaiachain/kaia-load-tester/testcase/perpVaultMMTxTC"
 	"github.com/myzhan/boomer"
 	"github.com/urfave/cli"
@@ -91,7 +92,7 @@ func onlyPerpTCs(cfg *config.Config) bool {
 		return false
 	}
 	for _, name := range tcs {
-		if name != perpNoTradeTxTC.Name && name != perpHalfFillTxTC.Name && name != perpVaultMMTxTC.Name {
+		if name != perpNoTradeTxTC.Name && name != perpHalfFillTxTC.Name && name != perpVaultMMTxTC.Name && name != perpTakerTxTC.Name {
 			return false
 		}
 	}
@@ -181,13 +182,13 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 	// But, from here including prepareTestContracts like MintERC721, only 20% of account happens
 	accGrp.SetAccGrpByActivePercent(cfg.GetActiveUserPercent())
 
-	// Perp test cases (perpNoTradeTxTC, perpHalfFillTxTC, perpVaultMMTxTC) share the same
+	// Perp test cases (perpNoTradeTxTC, perpHalfFillTxTC, perpVaultMMTxTC, perpTakerTxTC) share the same
 	// market and margin setup: inject the market id / reference price / tick size, then
 	// move USDT (token "2", the only genesis-whitelisted perp deposit token) from each
 	// active account's spot wallet into its perp wallet so orders have order margin.
 	// Mirrors the spot token charging pre-work above; the accounts already hold USDT
 	// from it.
-	if cfg.InTheTcList(perpNoTradeTxTC.Name) || cfg.InTheTcList(perpHalfFillTxTC.Name) || cfg.InTheTcList(perpVaultMMTxTC.Name) {
+	if cfg.InTheTcList(perpNoTradeTxTC.Name) || cfg.InTheTcList(perpHalfFillTxTC.Name) || cfg.InTheTcList(perpVaultMMTxTC.Name) || cfg.InTheTcList(perpTakerTxTC.Name) {
 		mktId, ref, tick := cfg.GetPerpMarketId(), cfg.GetPerpRefPrice(), cfg.GetPerpTickSize()
 		if cfg.InTheTcList(perpNoTradeTxTC.Name) {
 			perpNoTradeTxTC.SetMarketId(mktId)
@@ -198,6 +199,11 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 			perpHalfFillTxTC.SetMarketId(mktId)
 			perpHalfFillTxTC.SetRefPrice(ref)
 			perpHalfFillTxTC.SetTickSize(tick)
+		}
+		if cfg.InTheTcList(perpTakerTxTC.Name) {
+			perpTakerTxTC.SetMarketId(mktId)
+			perpTakerTxTC.SetRefPrice(ref)
+			perpTakerTxTC.SetTickSize(tick)
 		}
 
 		// Generous margin so orders never exhaust available balance during a run.
