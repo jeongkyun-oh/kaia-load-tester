@@ -243,6 +243,7 @@ func createTestAccGroupsAndPrepareContracts(cfg *config.Config, accGrp *account.
 				cfg.GetVaultLockupPeriod(), cfg.GetVaultDepositAmount(),
 				cfg.GetVaultExecutorCount(),
 				mktId, // marketId: restricts registered executors to this market
+				cfg.GetVaultMarketCap(), cfg.GetVaultMaxMarginUtilBps(),
 			)
 			if err != nil {
 				log.Fatalf("PerpVault setup failed: %v", err)

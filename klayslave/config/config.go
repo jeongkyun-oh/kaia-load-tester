@@ -37,10 +37,12 @@ type Config struct {
 	perpRefPrice float64 // reference (~mark) price in human units
 	perpTickSize float64 // market price tick in human units
 
-	vaultExecutorCount int
-	vaultDepositAmount float64 // human units; scaled to 18 decimals by accessor
-	vaultLockupPeriod  int64   // seconds; 0 → contract default
-	vaultTokenId       string  // perp margin tokenId (default "2" = USDT)
+	vaultExecutorCount    int
+	vaultDepositAmount    float64 // human units; scaled to 18 decimals by accessor
+	vaultLockupPeriod     int64   // seconds; 0 → contract default
+	vaultTokenId          string  // perp margin tokenId (default "2" = USDT)
+	vaultMarketCap        float64 // human units notional cap per market; 0 → leave unlimited
+	vaultMaxMarginUtilBps int     // margin utilization cap in BPS; 0 → leave unlimited
 
 	chargeKLAYAmount  float64
 	chargeParallelNum int
@@ -104,6 +106,8 @@ func (cfg *Config) setConfigsFromFlag(ctx *cli.Context) {
 	cfg.vaultDepositAmount = ctx.Float64("vaultDepositAmount")
 	cfg.vaultLockupPeriod = ctx.Int64("vaultLockupPeriod")
 	cfg.vaultTokenId = ctx.String("vaultTokenId")
+	cfg.vaultMarketCap = ctx.Float64("vaultMarketCap")
+	cfg.vaultMaxMarginUtilBps = ctx.Int("vaultMaxMarginUtilBps")
 
 	// Do not allow null richWalletPrivateKey
 	if cfg.richWalletPrivateKey == "" {
@@ -269,6 +273,26 @@ func (cfg *Config) GetVaultLockupPeriod() *big.Int {
 	return big.NewInt(cfg.vaultLockupPeriod)
 }
 
+// GetVaultMarketCap converts the human vaultMarketCap flag into an 18-decimal
+// fixed-point notional cap. Returns nil when unset (<=0) so the setup skips
+// setMarketRules and the cap stays unlimited on-chain (0 = Aave-style unset).
+func (cfg *Config) GetVaultMarketCap() *big.Int {
+	if cfg.vaultMarketCap <= 0 {
+		return nil
+	}
+	return humanToScaled(cfg.vaultMarketCap)
+}
+
+// GetVaultMaxMarginUtilBps returns the vault margin-utilization cap in BPS
+// (10000 = 100%). Returns nil when unset (<=0) so the setup skips
+// setMaxMarginUtilization and the cap stays unlimited on-chain.
+func (cfg *Config) GetVaultMaxMarginUtilBps() *big.Int {
+	if cfg.vaultMaxMarginUtilBps <= 0 {
+		return nil
+	}
+	return big.NewInt(int64(cfg.vaultMaxMarginUtilBps))
+}
+
 // humanToScaled converts a human decimal value to 18-decimal fixed-point.
 func humanToScaled(v float64) *big.Int {
 	f := new(big.Float).Mul(
@@ -326,6 +350,8 @@ var Flags = []cli.Flag{
 	cli.Float64Flag{Name: "vaultDepositAmount", Value: 0, Usage: "USDT (human units) the owner deposits into the vault as perp margin; 0 → 1e6"},
 	cli.Int64Flag{Name: "vaultLockupPeriod", Value: 0, Usage: "vault withdraw/redeem lockup seconds; 0 → contract default"},
 	cli.StringFlag{Name: "vaultTokenId", Value: "2", Usage: "perp margin tokenId for the vault (default 2 = USDT)"},
+	cli.Float64Flag{Name: "vaultMarketCap", Value: 1e12, Usage: "per-market notional cap (human USDT) set on the vault via setMarketRules; 0 → skip (unlimited, checkVaultLimits stays cheap)"},
+	cli.IntFlag{Name: "vaultMaxMarginUtilBps", Value: 10000, Usage: "vault margin utilization cap in BPS set via setMaxMarginUtilization (10000 = 100%, contract max); 0 → skip (unlimited)"},
 }
 
 var BoomerFlags = []cli.Flag{

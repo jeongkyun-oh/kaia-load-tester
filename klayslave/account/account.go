@@ -1157,6 +1157,12 @@ func (acc *Account) TransactOpts() (*bind.TransactOpts, error) {
 // GenPerpOrderTxBySession builds a PerpOrder dex-command tx authorized as a Path-C
 // session key: L1Owner is set to `l1owner` (the vault), and the OUTER tx is signed
 // by `sessionKey` (the executor). Mirrors GenNewPerpOrderTx otherwise.
+//
+// SessionNonce opts into per-session-key nonce accounting (OrderbookVersion3+).
+// Without it the nonce is accounted on the shared L1Owner (the vault), whose
+// time-nonce window tolerates only 100 out-of-order txs — all executors of a
+// slave would compete for it and late-arriving orders die on-chain with
+// "invalid timenonce" AFTER eth_sendRawTransaction already reported success.
 func (acc *Account) GenPerpOrderTxBySession(sessionKey *ecdsa.PrivateKey, l1owner common.Address, marketId uint64, side uint8, price, quantity *big.Int, tif uint8) (*types.Transaction, error) {
 	acc.mutex.Lock()
 	defer acc.mutex.Unlock()
@@ -1167,12 +1173,13 @@ func (acc *Account) GenPerpOrderTxBySession(sessionKey *ecdsa.PrivateKey, l1owne
 	acc.timenonce++
 
 	ctx := &types.PerpOrderContext{
-		L1Owner:     l1owner,
-		MarketId:    marketId,
-		Side:        side,
-		Price:       price,
-		Quantity:    quantity,
-		TimeInForce: tif,
+		L1Owner:      l1owner,
+		MarketId:     marketId,
+		Side:         side,
+		Price:        price,
+		Quantity:     quantity,
+		TimeInForce:  tif,
+		SessionNonce: true,
 	}
 
 	signer := types.LatestSignerForChainID(chainID)
