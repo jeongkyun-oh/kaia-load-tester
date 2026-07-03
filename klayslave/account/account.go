@@ -799,6 +799,52 @@ func (acc *Account) PerpDepositWithGuaranteeRetry(c *ethclient.Client, token str
 	return tx
 }
 
+// NewVaultDepositCtx builds a VaultDeposit command that moves `assets` of the
+// vault's registered deposit token from the L1 owner's spot wallet into the
+// vault's perp WalletBalance, minting shares to the owner. Authorized by the
+// outer tx signature (Path A: sender == L1Owner), so no L1Signature is set.
+func (acc *Account) NewVaultDepositCtx(vault common.Address, assets *big.Int) *types.VaultDepositContext {
+	return &types.VaultDepositContext{
+		L1Owner: acc.GetAddress(),
+		Vault:   vault,
+		Assets:  assets,
+	}
+}
+
+// GenVaultDepositTx generates a signed VaultDeposit dex-command tx (mirrors
+// GenPerpDepositTx). Direct EVM calls to PerpVault.deposit always revert:
+// ArbDex.vaultDeposit only honors deposits authorized by the dex-command vault
+// handlers (tx-scoped VaultDepositAuth stash, DEX-2045), so this path is the
+// only way to fund a vault.
+func (acc *Account) GenVaultDepositTx(vault common.Address, assets *big.Int) (*types.Transaction, error) {
+	acc.mutex.Lock()
+	defer acc.mutex.Unlock()
+
+	if acc.timenonce == 0 {
+		acc.timenonce = uint64(time.Now().UnixMilli())
+	}
+	acc.timenonce++
+
+	ctx := acc.NewVaultDepositCtx(vault, assets)
+
+	signer := types.LatestSignerForChainID(chainID)
+	input, err := types.WrapTxAsInput(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tx := types.NewTransaction(
+		acc.timenonce,
+		types.DexAddress,
+		common.Big0,
+		0,
+		common.Big0,
+		input,
+	)
+
+	return types.SignTx(tx, signer, acc.privateKey)
+}
+
 // NewPerpOrderCtx builds a PerpOrder (0x41) command. price/quantity are 18-decimal
 // fixed-point big.Int (the type's JSON marshaler renders them as decimal strings).
 func (acc *Account) NewPerpOrderCtx(marketId uint64, side uint8, price, quantity *big.Int, tif uint8) *types.PerpOrderContext {

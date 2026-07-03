@@ -83,13 +83,17 @@ func Deploy(cli *ethclient.Client, owner *account.Account, tokenId, name, symbol
 		return common.Address{}, nil, err
 	}
 
-	// 4) deposit margin into the vault
-	auth3, err := owner.TransactOpts()
+	// 4) deposit margin into the vault. PerpVault.deposit → ArbDex.vaultDeposit
+	// only accepts deposits authorized by the dex-command vault handlers (they
+	// stash a tx-scoped VaultDepositAuth before delegating; DEX-2045/ASA-60), so
+	// a direct EVM call to deposit() always reverts "vault deposit: unauthorized".
+	// Submit a VaultDeposit dex command instead (Path A: outer tx signed by the
+	// owner, gas-free like every dex-command tx).
+	depTx, err := owner.GenVaultDepositTx(proxyAddr, deposit)
 	if err != nil {
-		return common.Address{}, nil, err
+		return common.Address{}, nil, fmt.Errorf("vault deposit: %w", err)
 	}
-	depTx, err := vault.Deposit(auth3, deposit, owner.GetAddress())
-	if err != nil {
+	if _, err := owner.SendTx(cli, depTx); err != nil {
 		return common.Address{}, nil, fmt.Errorf("vault deposit: %w", err)
 	}
 	if err := waitMined(cli, depTx, "vault deposit"); err != nil {
